@@ -33,7 +33,7 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html');
 });
 
-// POST /api/users - Create user
+// Create new user
 app.post('/api/users', async (req, res) => {
   try {
     const user = new User({ username: req.body.username });
@@ -44,13 +44,13 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-// GET /api/users - Get all users
+// Get all users
 app.get('/api/users', async (req, res) => {
   const users = await User.find({}, '_id username');
   res.json(users);
 });
 
-// POST /api/users/:_id/exercises - Add exercise
+// Add exercise
 app.post('/api/users/:_id/exercises', async (req, res) => {
   try {
     const user = await User.findById(req.params._id);
@@ -79,7 +79,7 @@ app.post('/api/users/:_id/exercises', async (req, res) => {
   }
 });
 
-// GET /api/users/:_id/logs - Get exercise log with from, to, limit
+// Get exercise logs with optional from, to, limit
 app.get('/api/users/:_id/logs', async (req, res) => {
   try {
     const { from, to, limit } = req.query;
@@ -94,11 +94,11 @@ app.get('/api/users/:_id/logs', async (req, res) => {
       if (to) filter.date.$lte = new Date(to);
     }
 
-    let query = Exercise.find(filter).select('description duration date');
+    let exercisesQuery = Exercise.find(filter).select('description duration date');
 
-    if (limit) query = query.limit(parseInt(limit));
+    if (limit) exercisesQuery = exercisesQuery.limit(parseInt(limit));
 
-    const exercises = await query.exec();
+    const exercises = await exercisesQuery.exec();
 
     const logs = exercises.map((e) => ({
       description: e.description,
