@@ -33,7 +33,7 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html');
 });
 
-// POST /api/users - Create new user
+// POST /api/users - Create user
 app.post('/api/users', async (req, res) => {
   try {
     const user = new User({ username: req.body.username });
@@ -79,7 +79,7 @@ app.post('/api/users/:_id/exercises', async (req, res) => {
   }
 });
 
-// GET /api/users/:_id/logs - Get exercise log
+// GET /api/users/:_id/logs - Get exercise log with from, to, limit
 app.get('/api/users/:_id/logs', async (req, res) => {
   try {
     const { from, to, limit } = req.query;
@@ -96,20 +96,19 @@ app.get('/api/users/:_id/logs', async (req, res) => {
 
     let query = Exercise.find(filter).select('description duration date');
 
+    if (limit) query = query.limit(parseInt(limit));
+
     const exercises = await query.exec();
 
-    // Apply sorting and limiting AFTER fetching
-    let logs = exercises.map((e) => ({
+    const logs = exercises.map((e) => ({
       description: e.description,
       duration: e.duration,
       date: e.date.toDateString(),
     }));
 
-    if (limit) logs = logs.slice(0, parseInt(limit));
-
     res.json({
       username: user.username,
-      count: exercises.length,
+      count: logs.length,
       _id: user._id,
       log: logs,
     });
@@ -117,7 +116,6 @@ app.get('/api/users/:_id/logs', async (req, res) => {
     res.status(500).json({ error: 'Failed to get logs' });
   }
 });
-
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
