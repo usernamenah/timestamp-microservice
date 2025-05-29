@@ -1,14 +1,13 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>URL Shortener Microservice</title>
-  </head>
-  <body>
-    <h1>URL Shortener Microservice</h1>
-    <form action="/api/shorturl" method="post">
-      <label for="url_input">URL to shorten:</label>
-      <input type="url" id="url_input" name="url" placeholder="https://example.com" required>
-      <button type="submit">Shorten</button>
-    </form>
-  </body>
+<head>
+  <title>File Metadata Microservice</title>
+</head>
+<body>
+  <h1>File Metadata Microservice</h1>
+  <form id="uploadForm" action="/api/fileanalyse" method="post" enctype="multipart/form-data">
+    <input type="file" name="upfile" required />
+    <button type="submit">Upload</button>
+  </form>
+</body>
 </html>
