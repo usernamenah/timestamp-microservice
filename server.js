@@ -1,60 +1,103 @@
 const express = require('express');
 const cors = require('cors');
-const dns = require('dns');
-const bodyParser = require('body-parser');
-const app = express();
+const mongoose = require('mongoose');
+require('dotenv').config();
 
+const app = express();
 app.use(cors());
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-let urlDatabase = []; // array to store URLs
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 
-// Homepage
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true }
+});
+
+const exerciseSchema = new mongoose.Schema({
+  userId: String,
+  description: String,
+  duration: Number,
+  date: Date
+});
+
+const User = mongoose.model('User', userSchema);
+const Exercise = mongoose.model('Exercise', exerciseSchema);
+
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html');
 });
 
-// POST endpoint to shorten a URL
-app.post('/api/shorturl', (req, res) => {
-  const original_url = req.body.url;
+// POST create user
+app.post('/api/users', async (req, res) => {
+  const user = new User({ username: req.body.username });
+  const savedUser = await user.save();
+  res.json({ username: savedUser.username, _id: savedUser._id });
+});
 
-  // Validate using regex (must start with http or https)
-  const urlRegex = /^https?:\/\/.+/;
-  if (!urlRegex.test(original_url)) {
-    return res.json({ error: 'invalid url' });
-  }
+// GET all users
+app.get('/api/users', async (req, res) => {
+  const users = await User.find({});
+  res.json(users);
+});
 
-  // Remove protocol for DNS lookup
-  const urlWithoutProtocol = original_url.replace(/^https?:\/\//, '').split('/')[0];
+// POST add exercise
+app.post('/api/users/:_id/exercises', async (req, res) => {
+  const { description, duration, date } = req.body;
+  const userId = req.params._id;
+  const user = await User.findById(userId);
+  if (!user) return res.json({ error: 'User not found' });
 
-  dns.lookup(urlWithoutProtocol, (err) => {
-    if (err) {
-      return res.json({ error: 'invalid url' });
-    }
+  const exercise = new Exercise({
+    userId,
+    description,
+    duration: parseInt(duration),
+    date: date ? new Date(date) : new Date()
+  });
+  const savedExercise = await exercise.save();
 
-    const short_url = urlDatabase.length + 1;
-    urlDatabase.push({ original_url, short_url });
-
-    res.json({ original_url, short_url });
+  res.json({
+    _id: user._id,
+    username: user.username,
+    date: savedExercise.date.toDateString(),
+    duration: savedExercise.duration,
+    description: savedExercise.description
   });
 });
 
-// GET endpoint to redirect
-app.get('/api/shorturl/:short_url', (req, res) => {
-  const short_url = parseInt(req.params.short_url);
+// GET user logs
+app.get('/api/users/:_id/logs', async (req, res) => {
+  const { from, to, limit } = req.query;
+  const userId = req.params._id;
+  const user = await User.findById(userId);
+  if (!user) return res.json({ error: 'User not found' });
 
-  const entry = urlDatabase.find(item => item.short_url === short_url);
-
-  if (entry) {
-    res.redirect(entry.original_url);
-  } else {
-    res.json({ error: 'No short URL found for given input' });
+  let filter = { userId };
+  if (from || to) {
+    filter.date = {};
+    if (from) filter.date.$gte = new Date(from);
+    if (to) filter.date.$lte = new Date(to);
   }
+
+  let query = Exercise.find(filter).select('-__v -userId');
+  if (limit) query = query.limit(parseInt(limit));
+
+  const exercises = await query.exec();
+
+  res.json({
+    username: user.username,
+    count: exercises.length,
+    _id: user._id,
+    log: exercises.map(e => ({
+      description: e.description,
+      duration: e.duration,
+      date: e.date.toDateString()
+    }))
+  });
 });
 
-// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
