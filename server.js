@@ -4,22 +4,26 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
 
 const userSchema = new mongoose.Schema({
-  username: { type: String, required: true }
+  username: { type: String, required: true },
 });
 
 const exerciseSchema = new mongoose.Schema({
-  userId: String,
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   description: String,
   duration: Number,
-  date: Date
+  date: Date,
 });
 
 const User = mongoose.model('User', userSchema);
@@ -29,72 +33,84 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html');
 });
 
-// POST create user
+// POST /api/users - Create new user
 app.post('/api/users', async (req, res) => {
-  const user = new User({ username: req.body.username });
-  const savedUser = await user.save();
-  res.json({ username: savedUser.username, _id: savedUser._id });
+  try {
+    const user = new User({ username: req.body.username });
+    const savedUser = await user.save();
+    res.json({ username: savedUser.username, _id: savedUser._id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create user' });
+  }
 });
 
-// GET all users
+// GET /api/users - Get all users
 app.get('/api/users', async (req, res) => {
-  const users = await User.find({});
+  const users = await User.find({}, '_id username');
   res.json(users);
 });
 
-// POST add exercise
+// POST /api/users/:_id/exercises - Add exercise
 app.post('/api/users/:_id/exercises', async (req, res) => {
-  const { description, duration, date } = req.body;
-  const userId = req.params._id;
-  const user = await User.findById(userId);
-  if (!user) return res.json({ error: 'User not found' });
+  try {
+    const user = await User.findById(req.params._id);
+    if (!user) return res.status(400).json({ error: 'User not found' });
 
-  const exercise = new Exercise({
-    userId,
-    description,
-    duration: parseInt(duration),
-    date: date ? new Date(date) : new Date()
-  });
-  const savedExercise = await exercise.save();
+    const { description, duration, date } = req.body;
 
-  res.json({
-    _id: user._id,
-    username: user.username,
-    date: savedExercise.date.toDateString(),
-    duration: savedExercise.duration,
-    description: savedExercise.description
-  });
+    const exercise = new Exercise({
+      userId: user._id,
+      description,
+      duration: parseInt(duration),
+      date: date ? new Date(date) : new Date(),
+    });
+
+    const savedExercise = await exercise.save();
+
+    res.json({
+      _id: user._id,
+      username: user.username,
+      description: savedExercise.description,
+      duration: savedExercise.duration,
+      date: savedExercise.date.toDateString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to add exercise' });
+  }
 });
 
-// GET user logs
+// GET /api/users/:_id/logs - Get exercise log
 app.get('/api/users/:_id/logs', async (req, res) => {
-  const { from, to, limit } = req.query;
-  const userId = req.params._id;
-  const user = await User.findById(userId);
-  if (!user) return res.json({ error: 'User not found' });
+  try {
+    const { from, to, limit } = req.query;
+    const user = await User.findById(req.params._id);
+    if (!user) return res.status(400).json({ error: 'User not found' });
 
-  let filter = { userId };
-  if (from || to) {
-    filter.date = {};
-    if (from) filter.date.$gte = new Date(from);
-    if (to) filter.date.$lte = new Date(to);
+    let filter = { userId: user._id };
+    if (from || to) {
+      filter.date = {};
+      if (from) filter.date.$gte = new Date(from);
+      if (to) filter.date.$lte = new Date(to);
+    }
+
+    let query = Exercise.find(filter).select('description duration date');
+    if (limit) query = query.limit(parseInt(limit));
+
+    const exercises = await query.exec();
+
+    res.json({
+      username: user.username,
+      count: exercises.length,
+      _id: user._id,
+      log: exercises.map((e) => ({
+        description: e.description,
+        duration: e.duration,
+        date: e.date.toDateString(),
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get logs' });
   }
-
-  let query = Exercise.find(filter).select('-__v -userId');
-  if (limit) query = query.limit(parseInt(limit));
-
-  const exercises = await query.exec();
-
-  res.json({
-    username: user.username,
-    count: exercises.length,
-    _id: user._id,
-    log: exercises.map(e => ({
-      description: e.description,
-      duration: e.duration,
-      date: e.date.toDateString()
-    }))
-  });
 });
 
 const PORT = process.env.PORT || 3000;
