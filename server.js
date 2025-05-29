@@ -4,14 +4,11 @@ const dns = require('dns');
 const bodyParser = require('body-parser');
 const app = express();
 
-// Basic in-memory store
-const urls = {};
-let counter = 1;
-
-// Middleware
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.static('public'));
+
+let urlDatabase = []; // array to store URLs
 
 // Homepage
 app.get('/', (req, res) => {
@@ -22,27 +19,35 @@ app.get('/', (req, res) => {
 app.post('/api/shorturl', (req, res) => {
   const original_url = req.body.url;
 
-  // Remove protocol (http:// or https://) for DNS check
-  const urlWithoutProtocol = original_url.replace(/^https?:\/\//, '');
+  // Validate using regex (must start with http or https)
+  const urlRegex = /^https?:\/\/.+/;
+  if (!urlRegex.test(original_url)) {
+    return res.json({ error: 'invalid url' });
+  }
 
-  dns.lookup(urlWithoutProtocol, (err, address) => {
+  // Remove protocol for DNS lookup
+  const urlWithoutProtocol = original_url.replace(/^https?:\/\//, '').split('/')[0];
+
+  dns.lookup(urlWithoutProtocol, (err) => {
     if (err) {
       return res.json({ error: 'invalid url' });
-    } else {
-      const short_url = counter++;
-      urls[short_url] = original_url;
-      res.json({ original_url, short_url });
     }
+
+    const short_url = urlDatabase.length + 1;
+    urlDatabase.push({ original_url, short_url });
+
+    res.json({ original_url, short_url });
   });
 });
 
-// Redirect endpoint
+// GET endpoint to redirect
 app.get('/api/shorturl/:short_url', (req, res) => {
-  const short_url = req.params.short_url;
-  const original_url = urls[short_url];
+  const short_url = parseInt(req.params.short_url);
 
-  if (original_url) {
-    res.redirect(original_url);
+  const entry = urlDatabase.find(item => item.short_url === short_url);
+
+  if (entry) {
+    res.redirect(entry.original_url);
   } else {
     res.json({ error: 'No short URL found for given input' });
   }
