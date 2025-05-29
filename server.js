@@ -87,6 +87,7 @@ app.get('/api/users/:_id/logs', async (req, res) => {
     if (!user) return res.status(400).json({ error: 'User not found' });
 
     let filter = { userId: user._id };
+
     if (from || to) {
       filter.date = {};
       if (from) filter.date.$gte = new Date(from);
@@ -94,24 +95,29 @@ app.get('/api/users/:_id/logs', async (req, res) => {
     }
 
     let query = Exercise.find(filter).select('description duration date');
-    if (limit) query = query.limit(parseInt(limit));
 
     const exercises = await query.exec();
+
+    // Apply sorting and limiting AFTER fetching
+    let logs = exercises.map((e) => ({
+      description: e.description,
+      duration: e.duration,
+      date: e.date.toDateString(),
+    }));
+
+    if (limit) logs = logs.slice(0, parseInt(limit));
 
     res.json({
       username: user.username,
       count: exercises.length,
       _id: user._id,
-      log: exercises.map((e) => ({
-        description: e.description,
-        duration: e.duration,
-        date: e.date.toDateString(),
-      })),
+      log: logs,
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to get logs' });
   }
 });
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
